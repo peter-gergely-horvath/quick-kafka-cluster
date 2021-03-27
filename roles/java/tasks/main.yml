@@ -1,0 +1,5 @@
+- set_fact:
+    jdk_package_name: openjdk-11-jdk
+  tags: 
+    - java 
+    - java_installation
