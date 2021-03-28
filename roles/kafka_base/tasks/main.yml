@@ -1,0 +1,76 @@
+- set_fact:
+    kafka_download_url: "https://downloads.apache.org/kafka/{{kafka_version}}/kafka_{{kafka_scala_version}}-{{kafka_version}}.tgz"
+
+- set_fact:
+    kafka_tgz_local_path: "downloads/kafka_{{kafka_scala_version}}-{{kafka_version}}.tgz"
+
+- set_fact:
+    kafka_tgz_vm_path: "/opt/kafka_{{kafka_scala_version}}-{{kafka_version}}.tgz"
+
+- set_fact:
+    kafka_vm_dir: "/opt/kafka"
+
+- set_fact:
+    kafka_tmp_dir: "/opt/kafka_{{kafka_scala_version}}-{{kafka_version}}"
+
+
+- name: "Ensure group '{{kafka_linux_group}}' exists"
+  ansible.builtin.group:
+    name: "{{kafka_linux_group}}"
+    state: present
+
+- name: "Ensure user {{kafka_linux_user}} exists within group: {{kafka_linux_group}}"
+  ansible.builtin.user:
+    name: "{{kafka_linux_user}}"
+    groups: "{{kafka_linux_group}}"
+    append: yes
+
+
+- name: "Check if Kafka distribution is downloaded"
+  local_action: stat path={{kafka_tgz_local_path}}
+  become: no
+  register: kafka_tgz_local_path_stat
+
+- name: "Download Kafka distribution to local machine, if not yet downloaded"
+  local_action: get_url url="{{kafka_download_url}}" dest="{{kafka_tgz_local_path}}"
+  become: no
+  when: not kafka_tgz_local_path_stat.stat.exists
+
+- name: "Check if Kafka distribution is uploaded to VM"
+  stat:
+    path: "{{kafka_tgz_vm_path}}"
+  become: no
+  register: kafka_tgz_vm_path_stat
+
+- name: "Check if Kafka directory exists"
+  stat:
+    path: "{{kafka_vm_dir}}"
+  become: no
+  register: kafka_vm_dir_stat
+
+- name: "Copy Kafka distribution to VM host"
+  copy:
+    src: "{{kafka_tgz_local_path}}"
+    dest: "{{kafka_tgz_vm_path}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: '0666'
+  when: not (kafka_tgz_vm_path_stat.stat.exists or kafka_vm_dir_stat.stat.exists)
+
+- name: "Extract {{kafka_tgz_vm_path}} into {{kafka_vm_dir}}"
+  unarchive:
+    remote_src: yes
+    src: "{{kafka_tgz_vm_path}}"
+    dest: "/opt"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+  when: not kafka_vm_dir_stat.stat.exists
+
+- name: "Remove {{kafka_tgz_vm_path}}"
+  file:
+    path: "{{kafka_tgz_vm_path}}"
+    state: absent
+
+- name: "Rename {{kafka_tmp_dir}} {{kafka_vm_dir}}"
+  command: "mv {{kafka_tmp_dir}} {{kafka_vm_dir}}"
+  when: not kafka_vm_dir_stat.stat.exists
