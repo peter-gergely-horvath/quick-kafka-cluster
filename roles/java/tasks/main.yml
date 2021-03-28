@@ -1,5 +1,22 @@
 - set_fact:
-    jdk_package_name: openjdk-11-jdk
+    jdk_package_name: "openjdk-{{jdk_version}}-jdk"
   tags: 
     - java 
     - java_installation
+
+- name: Add openjdk repository from PPA and install its signing key
+  ansible.builtin.apt_repository:
+    repo: ppa:openjdk-r/ppa
+
+- name: Update and upgrade apt packages
+  become: true
+  apt:
+    upgrade: yes
+    update_cache: yes
+
+- name: "Install Java runtime: {{jdk_package_name}}"
+  apt:
+    name: "{{jdk_package_name}}"
+    state: latest
+
+
