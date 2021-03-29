@@ -74,3 +74,44 @@
 - name: "Rename {{kafka_tmp_dir}} {{kafka_vm_dir}}"
   command: "mv {{kafka_tmp_dir}} {{kafka_vm_dir}}"
   when: not kafka_vm_dir_stat.stat.exists
+
+- name: Write kafka-zookeeper.service file
+  template:
+    src: templates/kafka-zookeeper.service.j2
+    dest: /etc/systemd/system/kafka-zookeeper.service
+    owner: "root"
+    group: "root"
+    mode: "0644"
+
+- name: Write kafka-zookeeper.service file
+  template:
+    src: templates/kafka.service.j2
+    dest: /etc/systemd/system/kafka.service
+    owner: "root"
+    group: "root"
+    mode: "0644"
+
+- name: Start kafka-zookeeper service
+  systemd:
+    state: started
+    daemon_reload: yes
+    name: kafka-zookeeper
+
+
+- name: Start kafka service
+  systemd:
+    state: started
+    daemon_reload: yes
+    name: kafka
+
+- name: Enable kafka-zookeeper service
+  systemd:
+    name: kafka-zookeeper
+    enabled: yes
+    masked: no
+
+- name: Enable kafka service
+  systemd:
+    name: kafka
+    enabled: yes
+    masked: no
