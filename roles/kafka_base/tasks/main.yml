@@ -75,6 +75,17 @@
   command: "mv {{kafka_tmp_dir}} {{kafka_vm_dir}}"
   when: not kafka_vm_dir_stat.stat.exists
 
+# Fish out broker ID from hostname -- can we avoid this somehow?
+- name: Figure out broker ID
+  shell: "hostname | tr -dc '0-9' "
+  register: kafka_broker_id_result
+
+- name: "Set broker ID in Kafka configuration"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^broker.id='
+    line: broker.id={{kafka_broker_id_result.stdout}}
+
 - name: Write kafka-zookeeper.service file
   template:
     src: templates/kafka-zookeeper.service.j2
@@ -91,12 +102,24 @@
     group: "root"
     mode: "0644"
 
+- name: Stop kafka service
+  systemd:
+    state: stopped
+    daemon_reload: yes
+    name: kafka
+
+- name: Stop kafka-zookeeper service
+  systemd:
+    state: stopped
+    daemon_reload: yes
+    name: kafka-zookeeper
+
+
 - name: Start kafka-zookeeper service
   systemd:
     state: started
     daemon_reload: yes
     name: kafka-zookeeper
-
 
 - name: Start kafka service
   systemd:
