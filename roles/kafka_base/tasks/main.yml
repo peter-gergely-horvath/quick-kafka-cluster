@@ -75,16 +75,100 @@
   command: "mv {{kafka_tmp_dir}} {{kafka_vm_dir}}"
   when: not kafka_vm_dir_stat.stat.exists
 
+
+- name: "Configure host names"
+  blockinfile:
+    path: /etc/hosts
+    block: |
+      192.168.77.21    kafkanode1
+      192.168.77.22    kafkanode2
+      192.168.77.23    kafkanode3
+
+
 # Fish out broker ID from hostname -- can we avoid this somehow?
 - name: Figure out broker ID
   shell: "hostname | tr -dc '0-9' "
   register: kafka_broker_id_result
 
+- set_fact:
+    kafka_broker_id: "{{kafka_broker_id_result.stdout}}"
+
+
 - name: "Set broker ID in Kafka configuration"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^broker.id='
-    line: broker.id={{kafka_broker_id_result.stdout}}
+    line: broker.id={{kafka_broker_id}}
+
+- name: Write kafka-zookeeper.service file
+  template:
+    src: templates/zookeeper_myid.j2
+    dest: "/tmp/zookeeper/myid"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: "0644"
+
+- name: "Configure Zookeeper tickTime"
+  lineinfile:
+    path: /opt/kafka/config/zookeeper.properties
+    regexp: '^tickTime='
+    line: tickTime=2000
+
+- name: "Configure Zookeeper dataDir"
+  lineinfile:
+    path: /opt/kafka/config/zookeeper.properties
+    regexp: '^dataDir='
+    line: dataDir=/tmp/zookeeper
+
+- name: "Configure Zookeeper clientPort"
+  lineinfile:
+    path: /opt/kafka/config/zookeeper.properties
+    regexp: '^clientPort='
+    line: clientPort=2181
+
+- name: "Configure Zookeeper initLimit"
+  lineinfile:
+    path: /opt/kafka/config/zookeeper.properties
+    regexp: '^initLimit='
+    line: initLimit=5
+
+- name: "Configure Zookeeper syncLimit"
+  lineinfile:
+    path: /opt/kafka/config/zookeeper.properties
+    regexp: '^syncLimit='
+    line: syncLimit=2
+
+- name: "Configure Zookeeper cluster members"
+  blockinfile:
+    path: /opt/kafka/config/zookeeper.properties
+    block: |
+      server.1=192.168.77.21:2888:3888
+      server.2=192.168.77.22:2888:3888
+      server.3=192.168.77.23:2888:3888
+
+- name: "Setup Zookeeper configuration in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^zookeeper.connect='
+    line: zookeeper.connect=192.168.77.21:2181,192.168.77.22:2181,192.168.77.23:2181
+
+- name: "Setup 'offsets.topic.replication.factor' in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^offsets.topic.replication.factor='
+    line: offsets.topic.replication.factor=2
+
+- name: "Setup 'transaction.state.log.replication.factor' in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^transaction.state.log.replication.factor='
+    line: transaction.state.log.replication.factor=2
+
+- name: "Setup 'transaction.state.log.min.isr' in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^transaction.state.log.min.isr='
+    line: transaction.state.log.min.isr=2
 
 - name: Write kafka-zookeeper.service file
   template:
