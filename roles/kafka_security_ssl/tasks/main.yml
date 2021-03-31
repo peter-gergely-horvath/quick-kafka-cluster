@@ -1,0 +1,9 @@
+
+
+- name: Create Kafka SSL configuration files directory
+  file:
+    path: "{{ssl_files_directory}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    state: directory
+    mode: '0700'

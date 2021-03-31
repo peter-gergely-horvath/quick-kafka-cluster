@@ -15,12 +15,12 @@
 
 
 - name: "Ensure group '{{kafka_linux_group}}' exists"
-  ansible.builtin.group:
+  group:
     name: "{{kafka_linux_group}}"
     state: present
 
 - name: "Ensure user {{kafka_linux_user}} exists within group: {{kafka_linux_group}}"
-  ansible.builtin.user:
+  user:
     name: "{{kafka_linux_user}}"
     groups: "{{kafka_linux_group}}"
     append: yes
@@ -80,9 +80,13 @@
   blockinfile:
     path: /etc/hosts
     block: |
+      192.168.77.21    kafkanode1.demo.localnet
+      192.168.77.22    kafkanode2.demo.localnet
+      192.168.77.23    kafkanode3.demo.localnet
       192.168.77.21    kafkanode1
       192.168.77.22    kafkanode2
       192.168.77.23    kafkanode3
+      127.0.0.1        localhost
 
 
 # Fish out broker ID from hostname -- can we avoid this somehow?
@@ -100,7 +104,15 @@
     regexp: '^broker.id='
     line: broker.id={{kafka_broker_id}}
 
-- name: Write kafka-zookeeper.service file
+- name: Create Zookeeper work directory
+  file:
+    path: /tmp/zookeeper/
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    state: directory
+    mode: '0755'
+
+- name: Write Zookeeper myid file
   template:
     src: templates/zookeeper_myid.j2
     dest: "/tmp/zookeeper/myid"

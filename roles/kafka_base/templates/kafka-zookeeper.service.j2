@@ -10,6 +10,7 @@ User={{kafka_linux_user}}
 Group={{kafka_linux_group}}
 ExecStart=/opt/kafka/bin/zookeeper-server-start.sh /opt/kafka/config/zookeeper.properties
 ExecStop=/opt/kafka/bin/zookeeper-server-stop.sh
+SuccessExitStatus=143
 
 [Install]
 WantedBy=multi-user.target

@@ -5,7 +5,7 @@
     - java_installation
 
 - name: Add openjdk repository from PPA and install its signing key
-  ansible.builtin.apt_repository:
+  apt_repository:
     repo: ppa:openjdk-r/ppa
 
 - name: Update and upgrade apt packages

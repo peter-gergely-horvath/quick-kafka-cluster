@@ -1,0 +1,11 @@
+
+ssl_files_directory: /opt/kafka/ssl/private
+
+ssl_truststore_location: "{{ssl_files_directory}}/kafka_server_truststore.jks"
+ssl_truststore_password: foobar+1234
+
+ssl_keystore_location: "{{ssl_files_directory}}/kafka_server_keystore.jks"
+ssl_keystore_password: foobar+1234
+
+ssl_key_password: foobar+1234
+

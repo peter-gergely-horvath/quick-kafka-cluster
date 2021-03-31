@@ -4,3 +4,4 @@
   roles:
     - java
     - kafka_base
+    - kafka_security_ssl
