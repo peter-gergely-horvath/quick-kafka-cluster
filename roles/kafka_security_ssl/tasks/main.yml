@@ -7,3 +7,60 @@
     group: "{{kafka_linux_group}}"
     state: directory
     mode: '0700'
+
+
+- name: "Create Cluster CA certificate"
+  command:
+    argv:
+      - openssl
+      - req
+      - -new
+      - -x509
+      - -keyout
+      - ca-key
+      - -out
+      - ca-cert
+      - -days
+      - 3650
+      - -passout
+      - pass:'{{ssl_key_password}}'
+      - -subj
+      - "/C=AT/ST=Vienna/L=Vienna /O=Demo/OU=Demo CA/CN=FOOBAR/emailAddress=admin@demo.localnet"
+    creates: ca-cert
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: "Fetch CA certificate file to command host"
+  fetch:
+    flat: yes
+    src: ca-cert
+    dest: ./ssl/ca-cert
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: "Distribute CA certificate file to cluster nodes"
+  copy:
+    src: ./ssl/ca-cert
+    dest: ca-cert
+    mode: '0400'
+  when: " 'ssl_main_setup_host' not in group_names"
+
+- name: "Import ca-cert to broker trust store"
+  community.general.java_cert:
+    cert_path: "ca-cert"
+    keystore_path: "{{ssl_truststore_location}}"
+    keystore_pass: "{{ssl_truststore_password}}"
+    keystore_create: yes
+    state: present
+    cert_alias: CARoot
+    trust_cacert: True
+
+- name: "Import ca-cert to client trust store"
+  become: no
+  local_action:
+    module: community.general.java_cert
+    cert_path: "ssl/ca-cert"
+    keystore_path: "ssl/kafka_client_truststore.jks"
+    keystore_pass: "{{ssl_truststore_password}}"
+    keystore_create: yes
+    state: present
+    cert_alias: CARoot
+    trust_cacert: True

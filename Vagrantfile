@@ -82,6 +82,9 @@ Vagrant.configure("2") do |config|
             # Disable default limit to connect to all the machines
             ansible.limit = "all"
             ansible.playbook = "playbook.yml"
+            ansible.groups = {
+                  "ssl_main_setup_host" => ["kafkanode1.demo.localnet"]
+                }
           end
         end
       end
