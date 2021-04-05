@@ -2,6 +2,7 @@
 - hosts: all
   become: true
   roles:
+    - basic_host
     - java
     - kafka_base
     - kafka_security_ssl

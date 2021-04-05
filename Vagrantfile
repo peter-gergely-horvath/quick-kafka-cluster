@@ -71,7 +71,7 @@ Vagrant.configure("2") do |config|
 
     N = 3
     (1..N).each do |machine_id|
-      config.vm.define "kafkanode#{machine_id}" do |machine|
+      config.vm.define "kafkanode#{machine_id}.demo.localnet" do |machine|
         machine.vm.hostname = "kafkanode#{machine_id}.demo.localnet"
         machine.vm.network "private_network", ip: "192.168.77.#{20+machine_id}"
 

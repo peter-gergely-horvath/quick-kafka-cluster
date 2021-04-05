@@ -1,0 +1,17 @@
+
+# Get current hostname, which does not contain full hostname
+- name: Get current hostname
+  shell: "hostname"
+  register: hostname_value
+
+- set_fact:
+    current_hostname: "{{hostname_value.stdout}}"
+
+- set_fact:
+    hostname_with_domain: "{{current_hostname}}.{{hostname_domain}}"
+
+- name: "Set hostname with domain"
+  hostname:
+    name: "{{hostname_with_domain}}"
+  when: "hostname_domain not in current_hostname"
+

@@ -8,4 +8,4 @@ IFS=$'\n\t'
 # IFS new value is less likely to cause confusing bugs when looping arrays or arguments (e.g. $@)
 
 
-vagrant ssh kafkanode2
+vagrant ssh kafkanode2.demo.localnet
