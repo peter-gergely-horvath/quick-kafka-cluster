@@ -64,3 +64,102 @@
     state: present
     cert_alias: CARoot
     trust_cacert: True
+
+- name: Get current hostname
+  shell: "hostname"
+  register: ssl_hostname_command_result
+
+- set_fact:
+    ssl_hostname: "{{ssl_hostname_command_result.stdout}}"
+
+# Apparently, community.general.java_cert does not cover all cases
+# we need so, we resort to plain commands.
+
+- name: Delete host certificate (if exists)
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -delete
+      - -noprompt
+      - -alias
+      - localhost
+      - -keystore
+      - "{{ssl_truststore_location}}"
+      - -storepass
+      - "{{ssl_truststore_password}}"
+  ignore_errors: yes
+
+- name: Generate host certificate
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -keystore
+      - "{{ssl_truststore_location}}"
+      - -alias
+      - localhost
+      - -keyalg
+      - RSA
+      - -validity
+      - 365
+      - -genkey
+      - -storepass
+      - "{{ssl_truststore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+      - -dname
+      - "CN={{ssl_hostname}}"
+      - -ext
+      - "SAN=DNS:{{ssl_hostname}}"
+
+- name: Delete certificate request file
+  ansible.builtin.file:
+    path: cert-file
+    state: absent
+
+- name: Create certificate request
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -keystore
+      - "{{ssl_truststore_location}}"
+      - -storepass
+      - "{{ssl_truststore_password}}"
+      - -alias
+      - localhost
+      - -certreq
+      - -file
+      - cert-file
+    creates: cert-file
+
+- name: "Fetch certificate requests to command host"
+  fetch:
+    src: cert-file
+    dest: ./ssl/certificate-requests
+
+- name: "Upload host certificates to SSL CA utility host"
+  copy:
+    src: ./ssl/certificate-requests
+    dest: ssl
+    mode: '0500'
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: Find ini files
+  find:
+    paths: ssl/certificate-requests
+    file_type: file
+    recurse: Yes
+  register: certificate_requests_files_matched
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: Debug certificate_requests_files_matched
+  debug:
+    var: certificate_requests_files_matched.files
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: Debug files_matched loop
+  debug:
+    var: item.path
+  loop: "{{ certificate_requests_files_matched.files|flatten(levels=1) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: " 'ssl_main_setup_host' in group_names"
