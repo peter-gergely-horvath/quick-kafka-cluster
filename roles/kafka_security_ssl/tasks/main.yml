@@ -84,9 +84,9 @@
       - -alias
       - localhost
       - -keystore
-      - "{{ssl_truststore_location}}"
+      - "{{ssl_keystore_location}}"
       - -storepass
-      - "{{ssl_truststore_password}}"
+      - "{{ssl_keystore_password}}"
   ignore_errors: yes
 
 - name: Generate host certificate
@@ -94,7 +94,7 @@
     argv:
       - keytool
       - -keystore
-      - "{{ssl_truststore_location}}"
+      - "{{ssl_keystore_location}}"
       - -alias
       - localhost
       - -keyalg
@@ -103,7 +103,7 @@
       - 365
       - -genkey
       - -storepass
-      - "{{ssl_truststore_password}}"
+      - "{{ssl_keystore_password}}"
       - -keypass
       - "{{ssl_key_password}}"
       - -dname
@@ -121,9 +121,9 @@
     argv:
       - keytool
       - -keystore
-      - "{{ssl_truststore_location}}"
+      - "{{ssl_keystore_location}}"
       - -storepass
-      - "{{ssl_truststore_password}}"
+      - "{{ssl_keystore_password}}"
       - -alias
       - localhost
       - -certreq
@@ -135,6 +135,11 @@
   fetch:
     src: cert-file
     dest: ./ssl/certificate-requests
+
+- name: "Remove ssl directory"
+  file:
+    path: ssl
+    state: absent
 
 - name: "Upload host certificates to SSL CA utility host"
   copy:
@@ -163,3 +168,101 @@
   loop_control:
     label: "{{ item.path }}"
   when: " 'ssl_main_setup_host' in group_names"
+
+- name: Sign each host key
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -req
+      - -CA
+      - ca-cert
+      - -CAkey
+      - ca-key
+      - -in
+      - "{{ item.path }}"
+      - -out
+      - "{{ item.path }}.signed"
+      - -days
+      - 365
+      - -CAcreateserial
+      - -passin
+      - pass:'{{ssl_key_password}}'
+  loop: "{{ certificate_requests_files_matched.files|flatten(levels=1) }}"
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: Find all signed certificate files
+  find:
+    paths: ssl/certificate-requests/
+    patterns: "*.signed"
+    recurse: yes
+  register: signed_certificates_files_found
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: Debug signed_certificates_files_found loop
+  debug:
+    var: item.path
+  loop: "{{ signed_certificates_files_found.files|flatten(levels=1) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: Fetch signed certificate files to command host
+  fetch:
+    flat: yes
+    src: "{{ item.path }}"
+    dest: ./ssl/signed-certificates/{{ item.path | dirname  | basename }}.signed-cert.key
+  with_items: "{{ signed_certificates_files_found.files }}"
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: "Distribute Signed certificate files to cluster nodes"
+  copy:
+    src: "./ssl/signed-certificates/{{inventory_hostname}}.signed-cert.key"
+    dest: "{{inventory_hostname}}.signed-cert.key"
+
+
+- name: Delete host certificate (if exists) from key store
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -delete
+      - -noprompt
+      - -alias
+      - localhost
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -storepass
+      - "{{ssl_keystore_password}}"
+  ignore_errors: yes
+
+- name: "Import host certificate to broker key store"
+  community.general.java_cert:
+    cert_path: "{{inventory_hostname}}.signed-cert.key"
+    keystore_path: "{{ssl_keystore_location}}"
+    keystore_pass: "{{ssl_keystore_password}}"
+    keystore_create: yes
+    state: present
+    cert_alias: localhost
+
+- name: Delete ca-cert (if exists) from key store
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -delete
+      - -noprompt
+      - -alias
+      - CARoot
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -storepass
+      - "{{ssl_keystore_password}}"
+  ignore_errors: yes
+
+- name: "Import ca-cert to broker key store"
+  community.general.java_cert:
+    cert_path: "ca-cert"
+    keystore_path: "{{ssl_keystore_location}}"
+    keystore_pass: "{{ssl_keystore_password}}"
+    state: present
+    cert_alias: CARoot
+    trust_cacert: True
