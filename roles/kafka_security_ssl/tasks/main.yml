@@ -266,3 +266,59 @@
     state: present
     cert_alias: CARoot
     trust_cacert: True
+
+
+- name: "Set trust store location in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^ssl.truststore.location='
+    line: ssl.truststore.location={{ssl_truststore_location}}
+
+
+- name: "Set trust store password in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^ssl.truststore.password='
+    line: ssl.truststore.password={{ssl_truststore_password}}
+
+- name: "Set key store location in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^ssl.keystore.location='
+    line: ssl.keystore.location={{ssl_keystore_location}}
+
+- name: "Set key store password in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^ssl.keystore.password='
+    line: ssl.keystore.password={{ssl_keystore_password}}
+
+- name: "Set key password in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^ssl.key.password='
+    line: ssl.key.password={{ssl_key_password}}
+
+#- name: "Setting inter-broker communication protocol in server.properties"
+#  lineinfile:
+#    path: /opt/kafka/config/server.properties
+#    regexp: '^security.inter.broker.protocol='
+#    line: security.inter.broker.protocol=PLAINTEXT
+#
+#- name: "Configure listeners in server.properties"
+#  lineinfile:
+#    path: /opt/kafka/config/server.properties
+#    regexp: '^listeners='
+#    line: listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093
+#
+#- name: "Configure advertised listeners in server.properties"
+#  lineinfile:
+#    path: /opt/kafka/config/server.properties
+#    regexp: '^advertised.listeners='
+#    line: advertised.listeners=PLAINTEXT://{{inventory_hostname}}:9092,SSL://{{inventory_hostname}}:9093
+#
+#
+#- name: Restart kafka service
+#  systemd:
+#    state: restarted
+#    name: kafka
