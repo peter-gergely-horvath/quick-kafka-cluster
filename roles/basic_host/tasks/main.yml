@@ -15,3 +15,10 @@
     name: "{{hostname_with_domain}}"
   when: "hostname_domain not in current_hostname"
 
+- name: "Configure host names in /etc/hosts"
+  template:
+    src: templates/etc_hosts.j2
+    dest: "/etc/hosts"
+    owner: "root"
+    group: "root"
+    mode: "0644"

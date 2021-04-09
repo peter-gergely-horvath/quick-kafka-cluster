@@ -76,19 +76,6 @@
   when: not kafka_vm_dir_stat.stat.exists
 
 
-- name: "Configure host names"
-  blockinfile:
-    path: /etc/hosts
-    block: |
-      192.168.77.21    kafkanode1.demo.localnet
-      192.168.77.22    kafkanode2.demo.localnet
-      192.168.77.23    kafkanode3.demo.localnet
-      192.168.77.21    kafkanode1
-      192.168.77.22    kafkanode2
-      192.168.77.23    kafkanode3
-      127.0.0.1        localhost
-
-
 # Fish out broker ID from hostname -- can we avoid this somehow?
 - name: Figure out broker ID
   shell: "hostname | tr -dc '0-9' "
