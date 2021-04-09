@@ -305,20 +305,20 @@
 #    regexp: '^security.inter.broker.protocol='
 #    line: security.inter.broker.protocol=PLAINTEXT
 #
-#- name: "Configure listeners in server.properties"
-#  lineinfile:
-#    path: /opt/kafka/config/server.properties
-#    regexp: '^listeners='
-#    line: listeners=PLAINTEXT://localhost:9092,SSL://localhost:9093
-#
-#- name: "Configure advertised listeners in server.properties"
-#  lineinfile:
-#    path: /opt/kafka/config/server.properties
-#    regexp: '^advertised.listeners='
-#    line: advertised.listeners=PLAINTEXT://{{inventory_hostname}}:9092,SSL://{{inventory_hostname}}:9093
-#
-#
-#- name: Restart kafka service
-#  systemd:
-#    state: restarted
-#    name: kafka
+- name: "Configure listeners in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^listeners='
+    line: listeners=PLAINTEXT://0.0.0.0:9092
+
+- name: "Configure advertised listeners in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^advertised.listeners='
+    line: advertised.listeners=PLAINTEXT://{{inventory_hostname}}:9092
+
+
+- name: Restart kafka service
+  systemd:
+    state: restarted
+    name: kafka
