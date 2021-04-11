@@ -8,62 +8,55 @@
     state: directory
     mode: '0700'
 
-
-- name: "Create Cluster CA certificate"
+- name: "Create Cluster CA files"
   command:
     argv:
       - openssl
       - req
       - -new
-      - -x509
-      - -keyout
-      - ca-key
-      - -out
-      - ca-cert
+      - -newkey
+      - rsa:4096
       - -days
       - 3650
-      - -passout
-      - pass:'{{ssl_key_password}}'
+      - -x509
       - -subj
-      - "/C=AT/ST=Vienna/L=Vienna /O=Demo/OU=Demo CA/CN=FOOBAR/emailAddress=admin@demo.localnet"
-    creates: ca-cert
+      - "/CN=DEMO CA"
+      - -keyout
+      - root.key
+      - -out
+      - root.crt
+      - -nodes
+    creates: root.key
   when: " 'ssl_main_setup_host' in group_names"
 
-- name: "Fetch CA certificate file to command host"
+
+- name: "Fetch Root CA key file to command host"
   fetch:
     flat: yes
-    src: ca-cert
-    dest: ./ssl/ca-cert
+    src: root.key
+    dest: ./ssl/root.key
   when: " 'ssl_main_setup_host' in group_names"
 
-- name: "Distribute CA certificate file to cluster nodes"
+- name: "Fetch Root CA certificate file to command host"
+  fetch:
+    flat: yes
+    src: root.crt
+    dest: ./ssl/root.crt
+  when: " 'ssl_main_setup_host' in group_names"
+
+- name: "Distribute CA certificate key to cluster nodes"
   copy:
-    src: ./ssl/ca-cert
-    dest: ca-cert
+    src: ./ssl/root.key
+    dest: root.key
     mode: '0400'
   when: " 'ssl_main_setup_host' not in group_names"
 
-- name: "Import ca-cert to broker trust store"
-  community.general.java_cert:
-    cert_path: "ca-cert"
-    keystore_path: "{{ssl_truststore_location}}"
-    keystore_pass: "{{ssl_truststore_password}}"
-    keystore_create: yes
-    state: present
-    cert_alias: CARoot
-    trust_cacert: True
-
-- name: "Import ca-cert to client trust store"
-  become: no
-  local_action:
-    module: community.general.java_cert
-    cert_path: "ssl/ca-cert"
-    keystore_path: "ssl/kafka_client_truststore.jks"
-    keystore_pass: "{{ssl_truststore_password}}"
-    keystore_create: yes
-    state: present
-    cert_alias: CARoot
-    trust_cacert: True
+- name: "Distribute CA certificate to cluster nodes"
+  copy:
+    src: ./ssl/root.crt
+    dest: root.crt
+    mode: '0400'
+  when: " 'ssl_main_setup_host' not in group_names"
 
 - name: Get current hostname
   shell: "hostname"
@@ -72,8 +65,6 @@
 - set_fact:
     ssl_hostname: "{{ssl_hostname_command_result.stdout}}"
 
-# Apparently, community.general.java_cert does not cover all cases
-# we need so, we resort to plain commands.
 
 - name: Delete host certificate (if exists)
   ansible.builtin.command:
@@ -89,16 +80,14 @@
       - "{{ssl_keystore_password}}"
   ignore_errors: yes
 
-- name: Generate host certificate
-  ansible.builtin.command:
+
+- name: "Generate server key"
+  command:
     argv:
       - keytool
+      - -noprompt
       - -keystore
       - "{{ssl_keystore_location}}"
-      - -alias
-      - localhost
-      - -keyalg
-      - RSA
       - -validity
       - 365
       - -genkey
@@ -107,144 +96,65 @@
       - -keypass
       - "{{ssl_key_password}}"
       - -dname
-      - "CN={{ssl_hostname}}"
+      - "CN={{inventory_hostname}}"
       - -ext
-      - "SAN=DNS:{{ssl_hostname}}"
+      - "SAN=DNS:{{inventory_hostname}}"
+      - -storetype
+      - pkcs12
 
-- name: Delete certificate request file
-  ansible.builtin.file:
-    path: cert-file
-    state: absent
-
-- name: Create certificate request
-  ansible.builtin.command:
+- name: "Create Server CSR"
+  command:
     argv:
       - keytool
+      - -noprompt
       - -keystore
       - "{{ssl_keystore_location}}"
       - -storepass
       - "{{ssl_keystore_password}}"
-      - -alias
-      - localhost
       - -certreq
       - -file
-      - cert-file
-    creates: cert-file
+      - server.csr
+    creates: server.csr
 
-- name: "Fetch certificate requests to command host"
-  fetch:
-    src: cert-file
-    dest: ./ssl/certificate-requests
 
-- name: "Remove ssl directory"
-  file:
-    path: ssl
-    state: absent
-
-- name: "Upload host certificates to SSL CA utility host"
-  copy:
-    src: ./ssl/certificate-requests
-    dest: ssl
-    mode: '0500'
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Find ini files
-  find:
-    paths: ssl/certificate-requests
-    file_type: file
-    recurse: Yes
-  register: certificate_requests_files_matched
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Debug certificate_requests_files_matched
-  debug:
-    var: certificate_requests_files_matched.files
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Debug files_matched loop
-  debug:
-    var: item.path
-  loop: "{{ certificate_requests_files_matched.files|flatten(levels=1) }}"
-  loop_control:
-    label: "{{ item.path }}"
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Sign each host key
-  ansible.builtin.command:
+- name: "Sign Server certificate"
+  command:
     argv:
       - openssl
       - x509
       - -req
-      - -CA
-      - ca-cert
-      - -CAkey
-      - ca-key
       - -in
-      - "{{ item.path }}"
-      - -out
-      - "{{ item.path }}.signed"
+      - server.csr
       - -days
       - 365
       - -CAcreateserial
+      - -CA
+      - root.crt
+      - -CAkey
+      - root.key
+      - -out
+      - server.crt
       - -passin
-      - pass:'{{ssl_key_password}}'
-  loop: "{{ certificate_requests_files_matched.files|flatten(levels=1) }}"
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Find all signed certificate files
-  find:
-    paths: ssl/certificate-requests/
-    patterns: "*.signed"
-    recurse: yes
-  register: signed_certificates_files_found
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Debug signed_certificates_files_found loop
-  debug:
-    var: item.path
-  loop: "{{ signed_certificates_files_found.files|flatten(levels=1) }}"
-  loop_control:
-    label: "{{ item.path }}"
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: Fetch signed certificate files to command host
-  fetch:
-    flat: yes
-    src: "{{ item.path }}"
-    dest: ./ssl/signed-certificates/{{ item.path | dirname  | basename }}.signed-cert.key
-  with_items: "{{ signed_certificates_files_found.files }}"
-  when: " 'ssl_main_setup_host' in group_names"
-
-- name: "Distribute Signed certificate files to cluster nodes"
-  copy:
-    src: "./ssl/signed-certificates/{{inventory_hostname}}.signed-cert.key"
-    dest: "{{inventory_hostname}}.signed-cert.key"
+      - "pass:{{ssl_key_password}}"
+    creates: server.crt
 
 
-- name: Delete host certificate (if exists) from key store
+
+- name: Delete CARoot certificate from truststore (if exists)
   ansible.builtin.command:
     argv:
       - keytool
       - -delete
       - -noprompt
       - -alias
-      - localhost
+      - CARoot
       - -keystore
-      - "{{ssl_keystore_location}}"
+      - "{{ssl_truststore_location}}"
       - -storepass
-      - "{{ssl_keystore_password}}"
+      - "{{ssl_truststore_password}}"
   ignore_errors: yes
 
-- name: "Import host certificate to broker key store"
-  community.general.java_cert:
-    cert_path: "{{inventory_hostname}}.signed-cert.key"
-    keystore_path: "{{ssl_keystore_location}}"
-    keystore_pass: "{{ssl_keystore_password}}"
-    keystore_create: yes
-    state: present
-    cert_alias: localhost
-
-- name: Delete ca-cert (if exists) from key store
+- name: Delete CARoot certificate from keystore (if exists)
   ansible.builtin.command:
     argv:
       - keytool
@@ -258,15 +168,120 @@
       - "{{ssl_keystore_password}}"
   ignore_errors: yes
 
-- name: "Import ca-cert to broker key store"
-  community.general.java_cert:
-    cert_path: "ca-cert"
-    keystore_path: "{{ssl_keystore_location}}"
-    keystore_pass: "{{ssl_keystore_password}}"
-    state: present
-    cert_alias: CARoot
-    trust_cacert: True
+- name: Delete localhost certificate from keystore (if exists)
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -delete
+      - -noprompt
+      - -alias
+      - localhost
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -storepass
+      - "{{ssl_keystore_password}}"
+  ignore_errors: yes
 
+
+- name: "Import root.crt to broker truststore"
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -keystore
+      - "{{ssl_truststore_location}}"
+      - -alias
+      - CARoot
+      - -import
+      - -file
+      - root.crt
+      - -storepass
+      - "{{ssl_truststore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+      - -noprompt
+
+- name: "Import root.crt to broker keystore"
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -alias
+      - CARoot
+      - -import
+      - -file
+      - root.crt
+      - -storepass
+      - "{{ssl_keystore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+      - -noprompt
+
+- name: "Import server.crt to broker keystore"
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -alias
+      - localhost
+      - -import
+      - -file
+      - server.crt
+      - -storepass
+      - "{{ssl_keystore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+      - -noprompt
+
+- name: Change trust store ownership and access settings
+  ansible.builtin.file:
+    path: "{{ssl_truststore_location}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: '0600'
+
+- name: Change key store ownership and access settings
+  ansible.builtin.file:
+    path: "{{ssl_keystore_location}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: '0600'
+
+
+- name: Create Kafka client SSL configuration files directory
+  file:
+    path: "{{client_ssl_files_directory}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    state: directory
+    mode: '0755'
+
+- name: Create SSL client truststore
+  ansible.builtin.copy:
+    remote_src: yes
+    src: "{{ssl_truststore_location}}"
+    dest: "{{client_ssl_truststore_location}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: '0644'
+
+- name: Create SSL client keystore
+  ansible.builtin.copy:
+    remote_src: yes
+    src: "{{ssl_keystore_location}}"
+    dest: "{{client_ssl_keystore_location}}"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: '0644'
+
+- name: "Create client SSL configuration"
+  template:
+    src: templates/client-ssl.properties.j2
+    dest: "{{client_ssl_files_directory}}/client-ssl.properties"
+    owner: "{{kafka_linux_user}}"
+    group: "{{kafka_linux_group}}"
+    mode: '0644'
 
 - name: "Set trust store location in server.properties"
   lineinfile:
@@ -302,6 +317,7 @@
 #- name: "Setting inter-broker communication protocol in server.properties"
 #  lineinfile:
 #    path: /opt/kafka/config/server.properties
+#    path: /opt/kafka/config/server.properties
 #    regexp: '^security.inter.broker.protocol='
 #    line: security.inter.broker.protocol=PLAINTEXT
 #
@@ -309,16 +325,23 @@
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^listeners='
-    line: listeners=PLAINTEXT://0.0.0.0:9092
+    line: listeners=PLAINTEXT://0.0.0.0:9092,SSL://0.0.0.0:9093
 
 - name: "Configure advertised listeners in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^advertised.listeners='
-    line: advertised.listeners=PLAINTEXT://{{inventory_hostname}}:9092
+    line: advertised.listeners=PLAINTEXT://{{inventory_hostname}}:9092,SSL://{{inventory_hostname}}:9093
+
+- name: "Configure client authentication setting in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^ssl.client.auth='
+    line: ssl.client.auth=none
 
 
 - name: Restart kafka service
   systemd:
     state: restarted
     name: kafka
+

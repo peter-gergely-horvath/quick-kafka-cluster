@@ -9,3 +9,12 @@ ssl_keystore_password: foobar+1234
 
 ssl_key_password: foobar+1234
 
+client_ssl_files_directory: /opt/kafka/client-ssl
+
+client_ssl_truststore_location: "{{client_ssl_files_directory}}/kafka_client_truststore.jks"
+client_ssl_truststore_password: "{{ssl_truststore_password}}"
+
+client_ssl_keystore_location: "{{client_ssl_files_directory}}/kafka_client_keystore.jks"
+client_ssl_keystore_password: "{{ssl_keystore_password}}"
+
+client_ssl_key_password: "{{ssl_key_password}}"
