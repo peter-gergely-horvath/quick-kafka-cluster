@@ -1,4 +1,8 @@
 
+- name: Stop Kafka service for the duration of SSL setup
+  systemd:
+    state: stopped
+    name: kafka
 
 - name: Create Kafka SSL configuration files directory
   file:
@@ -45,6 +49,26 @@
     dest: ./ssl/root.crt
   when: " 'ssl_main_setup_host' in group_names"
 
+- name: "Import root.crt to client trust store"
+  become: no
+  local_action:
+    module: ansible.builtin.command
+    argv:
+      - keytool
+      - -noprompt
+      - -keystore
+      - ssl/kafka_client_truststore.jks
+      - -alias
+      - CARoot
+      - -import
+      - -file
+      - ssl/root.crt
+      - -storepass
+      - "{{ssl_keystore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+    creates: ssl/kafka_client_truststore.jks
+
 - name: "Distribute CA certificate key to cluster nodes"
   copy:
     src: ./ssl/root.key
@@ -60,19 +84,15 @@
   when: " 'ssl_main_setup_host' not in group_names"
 
 
-- name: Delete host certificate (if exists)
-  ansible.builtin.command:
-    argv:
-      - keytool
-      - -delete
-      - -noprompt
-      - -alias
-      - "{{inventory_hostname}}"
-      - -keystore
-      - "{{ssl_keystore_location}}"
-      - -storepass
-      - "{{ssl_keystore_password}}"
-  ignore_errors: yes
+- name: Ensure there is no stale keystore file
+  ansible.builtin.file:
+    path: "{{ssl_keystore_location}}"
+    state: absent
+
+- name: Ensure there is no stale truststore file
+  ansible.builtin.file:
+    path: "{{ssl_truststore_location}}"
+    state: absent
 
 
 - name: "Generate server key"
@@ -144,47 +164,6 @@
       - -passin
       - pass:{{ssl_key_password}}
 
-- name: Delete CARoot certificate from truststore (if exists)
-  ansible.builtin.command:
-    argv:
-      - keytool
-      - -delete
-      - -noprompt
-      - -alias
-      - CARoot
-      - -keystore
-      - "{{ssl_truststore_location}}"
-      - -storepass
-      - "{{ssl_truststore_password}}"
-  ignore_errors: yes
-
-- name: Delete CARoot certificate from keystore (if exists)
-  ansible.builtin.command:
-    argv:
-      - keytool
-      - -delete
-      - -noprompt
-      - -alias
-      - CARoot
-      - -keystore
-      - "{{ssl_keystore_location}}"
-      - -storepass
-      - "{{ssl_keystore_password}}"
-  ignore_errors: yes
-
-- name: Delete server certificate from keystore (if exists)
-  ansible.builtin.command:
-    argv:
-      - keytool
-      - -delete
-      - -noprompt
-      - -alias
-      - localhost
-      - -keystore
-      - "{{ssl_keystore_location}}"
-      - -storepass
-      - "{{ssl_keystore_password}}"
-  ignore_errors: yes
 
 
 - name: "Import root.crt to broker keystore"
@@ -344,7 +323,7 @@
     line: ssl.client.auth=none
 
 
-- name: Restart kafka service
+- name: Start Kafka service after the SSL setup
   systemd:
-    state: restarted
+    state: started
     name: kafka
