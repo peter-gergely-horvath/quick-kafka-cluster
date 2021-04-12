@@ -14,18 +14,19 @@
       - openssl
       - req
       - -new
-      - -newkey
-      - rsa:4096
-      - -days
-      - 3650
       - -x509
-      - -subj
-      - "/CN=DEMO CA"
       - -keyout
       - root.key
       - -out
       - root.crt
-      - -nodes
+      - -days
+      - 365
+      - -subj
+      - '/CN=ca.demo.localnet/OU=DEMO CA/O=SAMPLE/L=Vienna/S=Vienna/C=AT'
+      - -passin
+      - pass:{{ssl_key_password}}
+      - -passout
+      - pass:{{ssl_key_password}}
     creates: root.key
   when: " 'ssl_main_setup_host' in group_names"
 
@@ -58,13 +59,6 @@
     mode: '0400'
   when: " 'ssl_main_setup_host' not in group_names"
 
-- name: Get current hostname
-  shell: "hostname"
-  register: ssl_hostname_command_result
-
-- set_fact:
-    ssl_hostname: "{{ssl_hostname_command_result.stdout}}"
-
 
 - name: Delete host certificate (if exists)
   ansible.builtin.command:
@@ -73,7 +67,7 @@
       - -delete
       - -noprompt
       - -alias
-      - localhost
+      - "{{inventory_hostname}}"
       - -keystore
       - "{{ssl_keystore_location}}"
       - -storepass
@@ -85,22 +79,27 @@
   command:
     argv:
       - keytool
+      - -genkey
       - -noprompt
+      - -alias
+      - "{{inventory_hostname}}"
+      - -dname
+      - "CN={{inventory_hostname}}, OU=DEMO, O=SAMPLE, L=Vienna, S=Vienna, C=AT"
       - -keystore
       - "{{ssl_keystore_location}}"
-      - -validity
-      - 365
-      - -genkey
+      - -keyalg
+      - RSA
       - -storepass
       - "{{ssl_keystore_password}}"
       - -keypass
       - "{{ssl_key_password}}"
-      - -dname
-      - "CN={{inventory_hostname}}"
       - -ext
       - "SAN=DNS:{{inventory_hostname}}"
-      - -storetype
-      - pkcs12
+
+- name: Ensure there is no stale Server CSR file
+  ansible.builtin.file:
+    path: "{{inventory_hostname}}.csr"
+    state: absent
 
 - name: "Create Server CSR"
   command:
@@ -109,12 +108,20 @@
       - -noprompt
       - -keystore
       - "{{ssl_keystore_location}}"
-      - -storepass
-      - "{{ssl_keystore_password}}"
+      - -alias
+      - "{{inventory_hostname}}"
       - -certreq
       - -file
-      - server.csr
-    creates: server.csr
+      - "{{inventory_hostname}}.csr"
+      - -storepass
+      - "{{ssl_keystore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+
+- name: Ensure there is no stale Server Certificate file
+  ansible.builtin.file:
+    path: "{{inventory_hostname}}.crt"
+    state: absent
 
 
 - name: "Sign Server certificate"
@@ -123,22 +130,19 @@
       - openssl
       - x509
       - -req
-      - -in
-      - server.csr
-      - -days
-      - 365
-      - -CAcreateserial
       - -CA
       - root.crt
       - -CAkey
       - root.key
+      - -in
+      - "{{inventory_hostname}}.csr"
       - -out
-      - server.crt
+      - "{{inventory_hostname}}.crt"
+      - -days
+      - 365
+      - -CAcreateserial
       - -passin
-      - "pass:{{ssl_key_password}}"
-    creates: server.crt
-
-
+      - pass:{{ssl_key_password}}
 
 - name: Delete CARoot certificate from truststore (if exists)
   ansible.builtin.command:
@@ -168,7 +172,7 @@
       - "{{ssl_keystore_password}}"
   ignore_errors: yes
 
-- name: Delete localhost certificate from keystore (if exists)
+- name: Delete server certificate from keystore (if exists)
   ansible.builtin.command:
     argv:
       - keytool
@@ -183,10 +187,45 @@
   ignore_errors: yes
 
 
+- name: "Import root.crt to broker keystore"
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -noprompt
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -alias
+      - CARoot
+      - -import
+      - -file
+      - root.crt
+      - -storepass
+      - "{{ssl_keystore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+
+- name: "Import server cert to broker keystore"
+  ansible.builtin.command:
+    argv:
+      - keytool
+      - -noprompt
+      - -keystore
+      - "{{ssl_keystore_location}}"
+      - -alias
+      - "{{inventory_hostname}}"
+      - -import
+      - -file
+      - "{{inventory_hostname}}.crt"
+      - -storepass
+      - "{{ssl_keystore_password}}"
+      - -keypass
+      - "{{ssl_key_password}}"
+
 - name: "Import root.crt to broker truststore"
   ansible.builtin.command:
     argv:
       - keytool
+      - -noprompt
       - -keystore
       - "{{ssl_truststore_location}}"
       - -alias
@@ -198,41 +237,6 @@
       - "{{ssl_truststore_password}}"
       - -keypass
       - "{{ssl_key_password}}"
-      - -noprompt
-
-- name: "Import root.crt to broker keystore"
-  ansible.builtin.command:
-    argv:
-      - keytool
-      - -keystore
-      - "{{ssl_keystore_location}}"
-      - -alias
-      - CARoot
-      - -import
-      - -file
-      - root.crt
-      - -storepass
-      - "{{ssl_keystore_password}}"
-      - -keypass
-      - "{{ssl_key_password}}"
-      - -noprompt
-
-- name: "Import server.crt to broker keystore"
-  ansible.builtin.command:
-    argv:
-      - keytool
-      - -keystore
-      - "{{ssl_keystore_location}}"
-      - -alias
-      - localhost
-      - -import
-      - -file
-      - server.crt
-      - -storepass
-      - "{{ssl_keystore_password}}"
-      - -keypass
-      - "{{ssl_key_password}}"
-      - -noprompt
 
 - name: Change trust store ownership and access settings
   ansible.builtin.file:
@@ -344,4 +348,3 @@
   systemd:
     state: restarted
     name: kafka
-
