@@ -69,6 +69,13 @@
       - "{{ssl_key_password}}"
     creates: ssl/kafka_client_truststore.jks
 
+- name: "Create local client SSL configuration"
+  become: no
+  local_action:
+    module: template
+    src: templates/local_client-ssl.properties.j2
+    dest: "ssl/local_client-ssl.properties"
+
 - name: "Distribute CA certificate key to cluster nodes"
   copy:
     src: ./ssl/root.key
