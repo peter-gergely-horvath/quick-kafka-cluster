@@ -271,6 +271,7 @@
     path: /opt/kafka/config/server.properties
     regexp: '^ssl.truststore.location='
     line: ssl.truststore.location={{ssl_truststore_location}}
+    insertafter: '^#ssl.truststore.location='
 
 
 - name: "Set trust store password in server.properties"
@@ -278,49 +279,56 @@
     path: /opt/kafka/config/server.properties
     regexp: '^ssl.truststore.password='
     line: ssl.truststore.password={{ssl_truststore_password}}
+    insertafter: '^#ssl.truststore.password='
 
 - name: "Set key store location in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^ssl.keystore.location='
     line: ssl.keystore.location={{ssl_keystore_location}}
+    insertafter: '^#ssl.keystore.location='
 
 - name: "Set key store password in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^ssl.keystore.password='
     line: ssl.keystore.password={{ssl_keystore_password}}
+    insertafter: '^#ssl.keystore.password='
 
 - name: "Set key password in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^ssl.key.password='
     line: ssl.key.password={{ssl_key_password}}
+    insertafter: '^#ssl.key.password='
 
-#- name: "Setting inter-broker communication protocol in server.properties"
-#  lineinfile:
-#    path: /opt/kafka/config/server.properties
-#    path: /opt/kafka/config/server.properties
-#    regexp: '^security.inter.broker.protocol='
-#    line: security.inter.broker.protocol=PLAINTEXT
-#
+- name: "Setting inter-broker communication protocol in server.properties"
+  lineinfile:
+    path: /opt/kafka/config/server.properties
+    regexp: '^security.inter.broker.protocol='
+    line: security.inter.broker.protocol=SSL
+    insertafter: '^#security.inter.broker.protocol='
+
 - name: "Configure listeners in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^listeners='
     line: listeners=PLAINTEXT://0.0.0.0:9092,SSL://0.0.0.0:9093
+    insertafter: '^#listeners='
 
 - name: "Configure advertised listeners in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^advertised.listeners='
     line: advertised.listeners=PLAINTEXT://{{inventory_hostname}}:9092,SSL://{{inventory_hostname}}:9093
+    insertafter: '^#advertised.listeners='
 
 - name: "Configure client authentication setting in server.properties"
   lineinfile:
     path: /opt/kafka/config/server.properties
     regexp: '^ssl.client.auth='
     line: ssl.client.auth=none
+    insertafter: '^#ssl.client.auth='
 
 
 - name: Start Kafka service after the SSL setup
