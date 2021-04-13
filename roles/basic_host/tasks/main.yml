@@ -22,3 +22,14 @@
     owner: "root"
     group: "root"
     mode: "0644"
+
+- name: "Adjust swappiness"
+  command: "sysctl vm.swappiness=1"
+
+
+- name: "Set swappiness configuration in /etc/sysctl.conf"
+  lineinfile:
+    path: /etc/sysctl.conf
+    regexp: '^vm.swappiness\s*='
+    line: vm.swappiness=1
+
